@@ -41,7 +41,10 @@ async function enviarDiscord(msg){
 });
   const page = await browser.newPage();
 
-  await page.goto(URL, { waitUntil: 'networkidle2' });
+  await page.goto(URL, {
+  waitUntil: 'networkidle2',
+  timeout: 120000
+  });
 
   // LOGIN
   await page.type('#txtUsuario', USER);
