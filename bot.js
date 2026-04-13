@@ -38,6 +38,30 @@ async function enviarDiscord(msg) {
   }
 }
 
+async function navegarSeguro(page, url) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      console.log(`🟡 intento navegación ${i + 1}`);
+
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 0
+      });
+
+      await page.waitForSelector('body', { timeout: 20000 });
+
+      console.log("🟢 navegación OK");
+      return;
+
+    } catch (err) {
+      console.log("❌ fallo navegación:", err.message);
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  throw new Error("No se pudo cargar la página después de 3 intentos");
+}
+
 async function iniciar() {
   browser = await puppeteer.launch({
     headless: "new",
@@ -66,29 +90,28 @@ async function iniciar() {
 
   console.log("🟡 abriendo página...");
 
-  // 🔥 navegación NO bloqueante (clave en Railway)
-  await page.goto(URL, {
-    waitUntil: 'domcontentloaded',
-    timeout: 0
-  });
+  await navegarSeguro(page, URL);
 
-  await page.waitForSelector('body');
   console.log("🟢 página cargada");
 
-  // 🔥 espera real para render dinámico
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(3000);
 
-  // 🔥 login seguro
+  // LOGIN ROBUSTO
   await page.waitForSelector('#txtUsuario', { timeout: 60000 });
+
   console.log("🟡 login detectado");
 
-  await page.type('#txtUsuario', USER, { delay: 50 });
-  await page.type('#txtClave', PASS, { delay: 50 });
+  await page.type('#txtUsuario', USER, { delay: 30 });
+  await page.type('#txtClave', PASS, { delay: 30 });
 
-  await Promise.all([
-    page.click('#btnIngresar'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 0 }).catch(() => {})
-  ]);
+  try {
+    await Promise.all([
+      page.click('#btnIngresar'),
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 0 })
+    ]);
+  } catch (e) {
+    console.log("⚠️ navegación post-login ignorada (normal en cloud)");
+  }
 
   console.log('Logueado correctamente');
   await enviarDiscord("✅ Bot activo y funcionando");
