@@ -105,9 +105,11 @@ async function iniciar() {
 
   await enviarDiscord("✅ Bot activo (Render + Axios stable)");
 
+  setTimeout(async () => {
   await chequear();
+   }, 5000);
 
-  setInterval(chequear, 30000);
+setInterval(chequear, 30000);
 
   setInterval(() => {
     console.log("🟢 bot vivo...");
@@ -123,3 +125,9 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (err) => {
   console.log("❌ PROMISE ERROR:", err);
 });
+
+console.log("🟢 iniciando loop de chequeo...");
+
+setInterval(() => {
+  console.log("🟢 tick chequeo activo");
+}, 10000);
