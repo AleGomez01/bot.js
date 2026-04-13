@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/AleGomez01/bot.js#readme",
   "dependencies": {
-    "discord.js": "^14.26.2"
+    "discord.js": "^14.26.2",
+    "dotenv": "^17.4.2"
   }
 }

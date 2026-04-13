@@ -1,3 +1,5 @@
 node_modules/
-.blackbox-editor/
 .env
+eventos.json
+*.log
+.DS_Store

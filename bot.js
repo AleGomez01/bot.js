@@ -1,10 +1,14 @@
+const fetch = (...args) =>
+  import('node-fetch').then(({default: fetch}) => fetch(...args));
+require('dotenv').config();
+
 const puppeteer = require('puppeteer');
 
-const WEBHOOK = 'https://discord.com/api/webhooks/1493055792159654139/niJrzak_5epZZlrSf6qHP7z0SqsWVmS1rVYA24gZ7Oub5EA1BMb2SHC1KsH6PYqW-Odv';
 const URL = 'https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx';
-
-const USER = '36379';
-const PASS = 'Mortadela13';
+const WEBHOOK = process.env.WEBHOOK;
+const USER = process.env.USER;
+const PASS = process.env.PASS;
+const token = process.env.TOKEN;
 
 let ejecutando = false;
 
@@ -26,7 +30,14 @@ async function enviarDiscord(msg){
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+  headless: true,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage'
+  ]
+});
   const page = await browser.newPage();
 
   await page.goto(URL, { waitUntil: 'networkidle2' });
