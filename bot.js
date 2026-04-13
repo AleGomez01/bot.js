@@ -41,6 +41,9 @@ async function enviarDiscord(msg){
 });
   const page = await browser.newPage();
 
+  await page.setDefaultNavigationTimeout(120000);
+  await page.setDefaultTimeout(120000);
+
   await page.goto(URL, {
   waitUntil: 'networkidle2',
   timeout: 120000
