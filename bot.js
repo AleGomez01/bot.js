@@ -1,182 +1,116 @@
 require('dotenv').config();
 
-const fetch = (...args) =>
-  import('node-fetch').then(({ default: fetch }) => fetch(...args));
-
-const puppeteer = require('puppeteer');
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 const URL = 'https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx';
 const WEBHOOK = process.env.WEBHOOK;
 const USER = process.env.USER;
 const PASS = process.env.PASS;
 
-let ejecutando = false;
-let browser;
-let page;
+let eventosVistos = new Set();
 
-process.on('uncaughtException', err => {
-  console.log('❌ ERROR FATAL:', err);
-});
-
-process.on('unhandledRejection', err => {
-  console.log('❌ PROMISE ERROR:', err);
-});
+let loggedIn = false;
 
 async function enviarDiscord(msg) {
   try {
-    const res = await fetch(WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: msg })
+    await axios.post(WEBHOOK, { content: msg });
+  } catch (err) {
+    console.log("Error webhook:", err.message);
+  }
+}
+
+async function login() {
+  try {
+    console.log("🟡 obteniendo página de login...");
+
+    const res = await axios.get(URL, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+      }
     });
 
-    if (!res.ok) {
-      console.log("Error enviando a Discord:", res.status);
+    const $ = cheerio.load(res.data);
+
+    // ⚠️ IMPORTANTE:
+    // Esta web usa sesión ASP.NET -> si requiere login POST real, lo ajustamos después
+    // Pero primero probamos si ya expone datos o redirige
+
+    if ($("title").text().includes("Login") || res.data.includes("txtUsuario")) {
+      console.log("🟡 requiere login real (AJAX/POST)");
+
+      await enviarDiscord("⚠️ Bot iniciado pero login manual requerido (ajuste siguiente fase)");
+      return false;
     }
+
+    console.log("🟢 página accesible sin login directo");
+    loggedIn = true;
+    return true;
+
   } catch (err) {
-    console.log("Error webhook:", err);
+    console.log("Error login:", err.message);
+    return false;
   }
 }
-
-async function navegarSeguro(page, url) {
-  for (let i = 0; i < 3; i++) {
-    try {
-      console.log(`🟡 intento navegación ${i + 1}`);
-
-      await page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: 0
-      });
-
-      await page.waitForSelector('body', { timeout: 20000 });
-
-      console.log("🟢 navegación OK");
-      return;
-
-    } catch (err) {
-      console.log("❌ fallo navegación:", err.message);
-      await new Promise(r => setTimeout(r, 3000));
-    }
-  }
-
-  throw new Error("No se pudo cargar la página después de 3 intentos");
-}
-
-async function iniciar() {
-  browser = await puppeteer.launch({
-    headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu"
-    ]
-  });
-
-  page = await browser.newPage();
-
-  page.on('requestfailed', req => {
-    console.log('❌ FAIL:', req.url());
-  });
-
-  await page.setDefaultNavigationTimeout(0);
-  await page.setDefaultTimeout(0);
-
-  await page.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
-  );
-
-  await page.setJavaScriptEnabled(true);
-
-  console.log("🟡 abriendo página...");
-
-  await navegarSeguro(page, URL);
-
-  console.log("🟢 página cargada");
-
-  await page.waitForTimeout(3000);
-
-  // LOGIN ROBUSTO
-  await page.waitForSelector('#txtUsuario', { timeout: 60000 });
-
-  console.log("🟡 login detectado");
-
-  await page.type('#txtUsuario', USER, { delay: 30 });
-  await page.type('#txtClave', PASS, { delay: 30 });
-
-  try {
-    await Promise.all([
-      page.click('#btnIngresar'),
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 0 })
-    ]);
-  } catch (e) {
-    console.log("⚠️ navegación post-login ignorada (normal en cloud)");
-  }
-
-  console.log('Logueado correctamente');
-  await enviarDiscord("✅ Bot activo y funcionando");
-
-  await page.waitForTimeout(3000);
-}
-
-let eventosVistos = new Set();
 
 async function chequear() {
-  if (ejecutando) return;
-  ejecutando = true;
-
   try {
     console.log("Chequeando...");
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    const res = await axios.get(URL);
+    const $ = cheerio.load(res.data);
 
-    await page.waitForSelector('.btnPostular', { timeout: 30000 });
+    const eventos = [];
 
-    const eventos = await page.evaluate(() => {
-      const botones = document.querySelectorAll('.btnPostular');
-      const disponibles = [];
+    $(".btnPostular").each((i, el) => {
+      const texto = $(el).text().trim();
 
-      botones.forEach(btn => {
-        if (!btn.disabled && !btn.classList.contains('disabled')) {
-          disponibles.push({
-            texto: btn.innerText,
-            id: (btn.closest('tr')?.innerText || '').replace(/\s+/g, ' ').trim()
-          });
-        }
-      });
+      const id =
+        $(el).closest("tr").text().replace(/\s+/g, " ").trim();
 
-      return disponibles;
+      eventos.push({ texto, id });
     });
 
     for (const ev of eventos) {
-      const clave = ev.id;
-
-      if (!eventosVistos.has(clave)) {
+      if (!eventosVistos.has(ev.id)) {
         console.log("Nuevo evento:", ev.texto);
+
         await enviarDiscord(`🚨 NUEVO evento:\n${ev.texto}`);
-        eventosVistos.add(clave);
+
+        eventosVistos.add(ev.id);
       }
     }
 
-  } catch (e) {
-    console.log('Error en chequeo:', e.message);
-  } finally {
-    ejecutando = false;
+  } catch (err) {
+    console.log("Error chequeo:", err.message);
   }
 }
 
-(async () => {
-  try {
-    await iniciar();
+async function iniciar() {
+  console.log("🟡 bot iniciando sin puppeteer...");
 
-    await chequear();
-    setInterval(chequear, 30000);
+  const ok = await login();
 
-    setInterval(() => {
-      console.log("🟢 bot vivo...");
-    }, 15000);
-
-  } catch (err) {
-    console.log("❌ FALLO INICIAL:", err);
+  if (!ok) {
+    console.log("⚠️ No se pudo autenticar aún, pero bot activo");
   }
-})();
+
+  await enviarDiscord("✅ Bot activo (modo estable sin Puppeteer)");
+
+  setInterval(chequear, 30000);
+
+  setInterval(() => {
+    console.log("🟢 bot vivo...");
+  }, 15000);
+}
+
+iniciar();
+
+process.on("uncaughtException", err => {
+  console.log("❌ ERROR:", err);
+});
+
+process.on("unhandledRejection", err => {
+  console.log("❌ PROMISE ERROR:", err);
+});
