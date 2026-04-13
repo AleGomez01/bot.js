@@ -4,8 +4,8 @@
   "description": "",
   "main": "bot.js",
   "scripts": {
-  "start": "node bot.js"
-},
+    "start": "node bot.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AleGomez01/bot.js.git"
@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/AleGomez01/bot.js/issues"
   },
-  "homepage": "https://github.com/AleGomez01/bot.js#readme"
+  "homepage": "https://github.com/AleGomez01/bot.js#readme",
+  "dependencies": {
+    "discord.js": "^14.26.2"
+  }
 }
