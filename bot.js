@@ -74,6 +74,9 @@ async function iniciar() {
 
   console.log("🟢 después de goto");
 
+  await page.waitForSelector('#txtUsuario', { timeout: 20000 });
+  console.log("🟡 login listo");
+
   // LOGIN
   await page.type('#txtUsuario', USER);
   await page.type('#txtClave', PASS);
