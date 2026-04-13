@@ -55,8 +55,8 @@ async function iniciar() {
     console.log('❌ FAIL:', req.url());
   });
 
-  await page.setDefaultNavigationTimeout(120000);
-  await page.setDefaultTimeout(120000);
+  await page.setDefaultNavigationTimeout(0);
+  await page.setDefaultTimeout(0);
 
   await page.setUserAgent(
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
@@ -64,28 +64,30 @@ async function iniciar() {
 
   await page.setJavaScriptEnabled(true);
 
-  console.log("🟡 antes de goto");
+  console.log("🟡 abriendo página...");
 
+  // 🔥 navegación NO bloqueante (clave en Railway)
   await page.goto(URL, {
-    waitUntil: 'domcontentloaded',
-    timeout: 120000
+    waitUntil: 'commit',
+    timeout: 0
   });
 
-  console.log("🟢 después de goto");
+  await page.waitForSelector('body');
+  console.log("🟢 página cargada");
 
-  // 🔥 espera REAL del DOM (fix clave)
+  // 🔥 espera real para render dinámico
   await page.waitForTimeout(5000);
 
-  // 🔥 espera segura del login
-  await page.waitForSelector('#txtUsuario', { timeout: 30000 });
-  console.log("🟡 login listo");
+  // 🔥 login seguro
+  await page.waitForSelector('#txtUsuario', { timeout: 60000 });
+  console.log("🟡 login detectado");
 
-  await page.type('#txtUsuario', USER);
-  await page.type('#txtClave', PASS);
+  await page.type('#txtUsuario', USER, { delay: 50 });
+  await page.type('#txtClave', PASS, { delay: 50 });
 
   await Promise.all([
     page.click('#btnIngresar'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 })
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 0 }).catch(() => {})
   ]);
 
   console.log('Logueado correctamente');
@@ -105,7 +107,7 @@ async function chequear() {
 
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    await page.waitForSelector('.btnPostular', { timeout: 20000 });
+    await page.waitForSelector('.btnPostular', { timeout: 30000 });
 
     const eventos = await page.evaluate(() => {
       const botones = document.querySelectorAll('.btnPostular');
