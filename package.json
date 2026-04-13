@@ -1,0 +1,21 @@
+{
+  "name": "bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bot.js",
+  "scripts": {
+  "start": "node bot.js"
+},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AleGomez01/bot.js.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AleGomez01/bot.js/issues"
+  },
+  "homepage": "https://github.com/AleGomez01/bot.js#readme"
+}
