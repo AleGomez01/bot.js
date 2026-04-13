@@ -1,6 +1,7 @@
-const fetch = (...args) =>
-  import('node-fetch').then(({default: fetch}) => fetch(...args));
 require('dotenv').config();
+
+const fetch = (...args) =>
+  import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const puppeteer = require('puppeteer');
 
@@ -8,46 +9,63 @@ const URL = 'https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosC
 const WEBHOOK = process.env.WEBHOOK;
 const USER = process.env.USER;
 const PASS = process.env.PASS;
-const token = process.env.TOKEN;
 
 let ejecutando = false;
+let browser;
+let page;
 
-async function enviarDiscord(msg){
+process.on('uncaughtException', err => {
+  console.log('❌ ERROR FATAL:', err);
+});
+
+process.on('unhandledRejection', err => {
+  console.log('❌ PROMISE ERROR:', err);
+});
+
+async function enviarDiscord(msg) {
   try {
     const res = await fetch(WEBHOOK, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: msg })
     });
 
     if (!res.ok) {
       console.log("Error enviando a Discord:", res.status);
     }
-
   } catch (err) {
     console.log("Error webhook:", err);
   }
 }
 
-(async () => {
-  const browser = await puppeteer.launch({
-  headless: "new",
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu"
-  ]
-});
-  const page = await browser.newPage();
+async function iniciar() {
+  browser = await puppeteer.launch({
+    headless: "new",
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu"
+    ]
+  });
+
+  page = await browser.newPage();
 
   await page.setDefaultNavigationTimeout(120000);
   await page.setDefaultTimeout(120000);
+  await page.setUserAgent(
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+   );
+   await page.setJavaScriptEnabled(true);
+
+   console.log("🟡 antes de goto");
 
   await page.goto(URL, {
-  waitUntil: 'networkidle2',
-  timeout: 120000
+    waitUntil: 'domcontentloaded',
+    timeout: 120000
   });
+
+  console.log("🟢 después de goto");
 
   // LOGIN
   await page.type('#txtUsuario', USER);
@@ -55,29 +73,27 @@ async function enviarDiscord(msg){
 
   await Promise.all([
     page.click('#btnIngresar'),
-    page.waitForNavigation({ waitUntil: 'networkidle2' })
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' })
   ]);
 
   console.log('Logueado correctamente');
+  await enviarDiscord("✅ Bot activo y funcionando");
 
-  enviarDiscord("✅ Bot activo y funcionando");
+  await page.waitForTimeout(3000);
+}
 
-  await page.reload({ waitUntil: 'networkidle2' });
-
-  await page.waitForSelector('.btnPostular', { timeout: 10000 });
-
-  let eventosVistos = new Set();
+let eventosVistos = new Set();
 
 async function chequear() {
-  if (ejecutando) return; // 👈 evita doble ejecución
-
+  if (ejecutando) return;
   ejecutando = true;
 
   try {
     console.log("Chequeando...");
 
-    await page.reload({ waitUntil: 'networkidle2' });
-    await page.waitForSelector('.btnPostular', { timeout: 10000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    await page.waitForSelector('.btnPostular', { timeout: 20000 });
 
     const eventos = await page.evaluate(() => {
       const botones = document.querySelectorAll('.btnPostular');
@@ -95,22 +111,36 @@ async function chequear() {
       return disponibles;
     });
 
-    eventos.forEach(ev => {
+    for (const ev of eventos) {
       const clave = ev.id;
 
       if (!eventosVistos.has(clave)) {
         console.log("Nuevo evento:", ev.texto);
-        enviarDiscord(`🚨 NUEVO evento:\n${ev.texto}`);
+        await enviarDiscord(`🚨 NUEVO evento:\n${ev.texto}`);
         eventosVistos.add(clave);
       }
-    });
+    }
 
   } catch (e) {
-    console.log('Error:', e);
+    console.log('Error en chequeo:', e.message);
   } finally {
-    ejecutando = false; // 👈 libera el lock SIEMPRE
+    ejecutando = false;
   }
 }
-  chequear(); // corre una vez al inicio
-setInterval(chequear, 30000);
+
+(async () => {
+  try {
+    await iniciar();
+
+    await chequear();
+    setInterval(chequear, 30000);
+
+    // keep-alive (Railway friendly)
+    setInterval(() => {
+      console.log("🟢 bot vivo...");
+    }, 15000);
+
+  } catch (err) {
+    console.log("❌ FALLO INICIAL:", err);
+  }
 })();
