@@ -4,9 +4,9 @@
   "description": "",
   "main": "bot.js",
   "scripts": {
-  "start": "node bot.js",
-  "postinstall": "npx puppeteer browsers install chrome"
-},
+    "start": "node bot.js",
+    "postinstall": "npx puppeteer browsers install chrome"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AleGomez01/bot.js.git"
@@ -21,6 +21,7 @@
   "homepage": "https://github.com/AleGomez01/bot.js#readme",
   "dependencies": {
     "discord.js": "^14.26.2",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "puppeteer": "^23.11.1"
   }
 }
