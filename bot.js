@@ -49,7 +49,7 @@ async function iniciar() {
     ]
   });
 
-  const page = await browser.newPage();
+  page = await browser.newPage();
 
   page.on('requestfailed', req => {
   console.log('❌ FAIL:', req.url());
