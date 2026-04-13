@@ -52,38 +52,40 @@ async function iniciar() {
   page = await browser.newPage();
 
   page.on('requestfailed', req => {
-  console.log('❌ FAIL:', req.url());
+    console.log('❌ FAIL:', req.url());
   });
 
   await page.setDefaultNavigationTimeout(120000);
   await page.setDefaultTimeout(120000);
+
   await page.setUserAgent(
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
-   );
-   await page.setJavaScriptEnabled(true);
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+  );
 
-   console.log("🟡 antes de goto");
+  await page.setJavaScriptEnabled(true);
 
-  await Promise.race([
-  page.goto(URL, {
-    waitUntil: 'load',
+  console.log("🟡 antes de goto");
+
+  await page.goto(URL, {
+    waitUntil: 'domcontentloaded',
     timeout: 120000
-  }),
-  new Promise(resolve => setTimeout(resolve, 20000))
-]);
+  });
 
   console.log("🟢 después de goto");
 
-  await page.waitForSelector('#txtUsuario', { timeout: 20000 });
+  // 🔥 espera REAL del DOM (fix clave)
+  await page.waitForTimeout(5000);
+
+  // 🔥 espera segura del login
+  await page.waitForSelector('#txtUsuario', { timeout: 30000 });
   console.log("🟡 login listo");
 
-  // LOGIN
   await page.type('#txtUsuario', USER);
   await page.type('#txtClave', PASS);
 
   await Promise.all([
     page.click('#btnIngresar'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded' })
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 })
   ]);
 
   console.log('Logueado correctamente');
@@ -145,7 +147,6 @@ async function chequear() {
     await chequear();
     setInterval(chequear, 30000);
 
-    // keep-alive (Railway friendly)
     setInterval(() => {
       console.log("🟢 bot vivo...");
     }, 15000);
