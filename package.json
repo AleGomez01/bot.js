@@ -4,8 +4,9 @@
   "description": "",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
-  },
+  "start": "node bot.js",
+  "postinstall": "npx puppeteer browsers install chrome"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AleGomez01/bot.js.git"

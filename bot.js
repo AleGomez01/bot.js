@@ -31,11 +31,12 @@ async function enviarDiscord(msg){
 
 (async () => {
   const browser = await puppeteer.launch({
-  headless: true,
+  headless: "new",
   args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage'
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu"
   ]
 });
   const page = await browser.newPage();
