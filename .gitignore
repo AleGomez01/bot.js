@@ -1,0 +1,3 @@
+node_modules/
+.blackbox-editor/
+.env
