@@ -1,28 +1,41 @@
 const express = require("express");
+const axios = require("axios");
+const cheerio = require("cheerio");
+const tough = require("tough-cookie");
+const { wrapper } = require("axios-cookiejar-support");
+
+require("dotenv").config();
+
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
   res.send("Bot activo");
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Servidor vivo en puerto", PORT);
+  console.log("Servidor OK en puerto", PORT);
 });
 
-require('dotenv').config();
+const URL =
+  "https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx";
 
-const axios = require("axios");
-const cheerio = require("cheerio");
-
-const URL = 'https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx';
 const WEBHOOK = process.env.WEBHOOK;
-const USER = process.env.USER;
-const PASS = process.env.PASS;
 
 let eventosVistos = new Set();
 
-let loggedIn = false;
+// 🧠 cliente con cookies persistentes
+const cookieJar = new tough.CookieJar();
+const client = wrapper(
+  axios.create({
+    jar: cookieJar,
+    withCredentials: true,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+    }
+  })
+);
 
 async function enviarDiscord(msg) {
   try {
@@ -32,37 +45,16 @@ async function enviarDiscord(msg) {
   }
 }
 
-async function login() {
+// 🔥 warmup inicial (IMPORTANTE en Render)
+async function iniciarSesion() {
   try {
-    console.log("🟡 obteniendo página de login...");
+    console.log("🟡 iniciando sesión base...");
 
-    const res = await axios.get(URL, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-      }
-    });
+    await client.get(URL);
 
-    const $ = cheerio.load(res.data);
-
-    // ⚠️ IMPORTANTE:
-    // Esta web usa sesión ASP.NET -> si requiere login POST real, lo ajustamos después
-    // Pero primero probamos si ya expone datos o redirige
-
-    if ($("title").text().includes("Login") || res.data.includes("txtUsuario")) {
-      console.log("🟡 requiere login real (AJAX/POST)");
-
-      await enviarDiscord("⚠️ Bot iniciado pero login manual requerido (ajuste siguiente fase)");
-      return false;
-    }
-
-    console.log("🟢 página accesible sin login directo");
-    loggedIn = true;
-    return true;
-
+    console.log("🟢 sesión inicial lista");
   } catch (err) {
-    console.log("Error login:", err.message);
-    return false;
+    console.log("Error sesión:", err.message);
   }
 }
 
@@ -70,7 +62,7 @@ async function chequear() {
   try {
     console.log("Chequeando...");
 
-    const res = await axios.get(URL);
+    const res = await client.get(URL);
     const $ = cheerio.load(res.data);
 
     const eventos = [];
@@ -78,11 +70,19 @@ async function chequear() {
     $(".btnPostular").each((i, el) => {
       const texto = $(el).text().trim();
 
-      const id =
-        $(el).closest("tr").text().replace(/\s+/g, " ").trim();
+      const id = $(el)
+        .closest("tr")
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
 
       eventos.push({ texto, id });
     });
+
+    if (eventos.length === 0) {
+      console.log("🟡 no hay eventos visibles (posible login requerido)");
+      return;
+    }
 
     for (const ev of eventos) {
       if (!eventosVistos.has(ev.id)) {
@@ -93,22 +93,19 @@ async function chequear() {
         eventosVistos.add(ev.id);
       }
     }
-
   } catch (err) {
     console.log("Error chequeo:", err.message);
   }
 }
 
 async function iniciar() {
-  console.log("🟡 bot iniciando sin puppeteer...");
+  console.log("🟡 bot iniciando SIN Puppeteer (modo estable)");
 
-  const ok = await login();
+  await iniciarSesion();
 
-  if (!ok) {
-    console.log("⚠️ No se pudo autenticar aún, pero bot activo");
-  }
+  await enviarDiscord("✅ Bot activo (Render + Axios stable)");
 
-  await enviarDiscord("✅ Bot activo (modo estable sin Puppeteer)");
+  await chequear();
 
   setInterval(chequear, 30000);
 
@@ -119,10 +116,10 @@ async function iniciar() {
 
 iniciar();
 
-process.on("uncaughtException", err => {
+process.on("uncaughtException", (err) => {
   console.log("❌ ERROR:", err);
 });
 
-process.on("unhandledRejection", err => {
+process.on("unhandledRejection", (err) => {
   console.log("❌ PROMISE ERROR:", err);
 });
