@@ -68,7 +68,7 @@ async function iniciar() {
 
   // 🔥 navegación NO bloqueante (clave en Railway)
   await page.goto(URL, {
-    waitUntil: 'commit',
+    waitUntil: 'domcontentloaded',
     timeout: 0
   });
 
