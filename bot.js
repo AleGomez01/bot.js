@@ -49,7 +49,11 @@ async function iniciar() {
     ]
   });
 
-  page = await browser.newPage();
+  const page = await browser.newPage();
+
+  page.on('requestfailed', req => {
+  console.log('❌ FAIL:', req.url());
+  });
 
   await page.setDefaultNavigationTimeout(120000);
   await page.setDefaultTimeout(120000);
@@ -60,10 +64,13 @@ async function iniciar() {
 
    console.log("🟡 antes de goto");
 
-  await page.goto(URL, {
-    waitUntil: 'domcontentloaded',
+  await Promise.race([
+  page.goto(URL, {
+    waitUntil: 'load',
     timeout: 120000
-  });
+  }),
+  new Promise(resolve => setTimeout(resolve, 20000))
+]);
 
   console.log("🟢 después de goto");
 
