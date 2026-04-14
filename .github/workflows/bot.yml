@@ -1,0 +1,22 @@
+name: Bot Eventos
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: node bot.js
+        env:
+          WEBHOOK: ${{ secrets.WEBHOOK }}
+          USUARIO: ${{ secrets.USUARIO }}
+          CLAVE: ${{ secrets.CLAVE }}
+        timeout-minutes: 3
