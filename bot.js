@@ -82,11 +82,13 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  const res = await client.post(API_URL, "{}", {
+const res = await client.post(API_URL, "{}", {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "X-Requested-With": "XMLHttpRequest",
-      Referer: `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
+      "Accept": "application/json, text/javascript, */*; q=0.01",
+      "Origin": "https://personal.seguridadciudad.gob.ar",
+      "Referer": `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
     },
   });
 
