@@ -139,10 +139,12 @@ async function main() {
     await chequear();
     console.log("✔️  Ejecución completada");
   } catch (err) {
-    console.log("❌ Error:", err.message);
-    await enviarDiscord(`⚠️ Bot error: ${err.message}`);
+    const detalle = err.response 
+      ? `Status: ${err.response.status}\n${JSON.stringify(err.response.data)}`
+      : err.message;
+    console.log("❌ Error detalle:", detalle);
+    await enviarDiscord(`⚠️ Bot error: ${detalle}`);
     process.exit(1);
   }
-}
 
 main();
