@@ -108,7 +108,7 @@ async function chequear() {
   console.log("🍪 Cookies tras GET:", Object.keys(cookieStore).join(", "));
 
   // POST a la API
-  const res = await client.post(API_URL, "", {
+  const res = await client.post(API_URL, "{}", {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Accept": "*/*",
