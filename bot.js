@@ -82,15 +82,21 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  // GET previo para inicializar sesión en esa página
+  // GET previo — guardamos las cookies de la respuesta manualmente
   const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
-  const $ = cheerio.load(getPage.data);
-  const viewstate = $("#__VIEWSTATE").val() || "";
-  console.log("✅ GET previo OK, ViewState:", viewstate ? "obtenido" : "vacío");
+  
+  // Forzar guardado de cookies del Set-Cookie de la respuesta
+  const setCookieHeaders = getPage.headers["set-cookie"];
+  if (setCookieHeaders) {
+    for (const cookieStr of setCookieHeaders) {
+      await cookieJar.setCookie(cookieStr, "https://personal.seguridadciudad.gob.ar");
+    }
+    console.log("🍪 Cookies forzadas:", setCookieHeaders.length);
+  }
 
-  // Log de cookies antes del POST
+  // Log de todas las cookies
   const cookies = await cookieJar.getCookies("https://personal.seguridadciudad.gob.ar");
-  console.log("🍪 Cookies en POST:", cookies.map(c => `${c.key}=${c.value.slice(0,10)}...`).join(", "));
+  console.log("🍪 Cookies totales:", cookies.map(c => c.key).join(", "));
 
   const res = await client.post(API_URL, "", {
     headers: {
