@@ -82,13 +82,19 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  const res = await client.post(API_URL, "{}", {
+  const res = await client.post(API_URL, null, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
+      "Accept": "*/*",
       "X-Requested-With": "XMLHttpRequest",
-      "Accept": "application/json, text/javascript, */*; q=0.01",
       "Origin": "https://personal.seguridadciudad.gob.ar",
       "Referer": `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "sec-ch-ua": '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
     },
   });
 
