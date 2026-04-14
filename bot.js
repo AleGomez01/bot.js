@@ -76,14 +76,15 @@ async function login() {
   }
 
   console.log("✅ Login exitoso");
-
-  const cookies = await cookieJar.getCookies("https://personal.seguridadciudad.gob.ar");
-  console.log("🍪 Cookies:", cookies.map(c => c.key).join(", "));
 }
 
 // ─── CHEQUEAR EVENTOS ─────────────────────────────────────
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
+
+  // GET previo para inicializar la sesión en esa página
+  await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
+  console.log("✅ GET previo OK");
 
   const res = await client.post(API_URL, null, {
     headers: {
