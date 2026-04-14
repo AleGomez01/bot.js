@@ -82,7 +82,7 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-const res = await client.post(API_URL, "{}", {
+  const res = await client.post(API_URL, "{}", {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "X-Requested-With": "XMLHttpRequest",
@@ -139,12 +139,13 @@ async function main() {
     await chequear();
     console.log("✔️  Ejecución completada");
   } catch (err) {
-    const detalle = err.response 
-      ? `Status: ${err.response.status}\n${JSON.stringify(err.response.data)}`
+    const detalle = err.response
+      ? `Status: ${err.response.status} - ${JSON.stringify(err.response.data).slice(0, 300)}`
       : err.message;
     console.log("❌ Error detalle:", detalle);
     await enviarDiscord(`⚠️ Bot error: ${detalle}`);
     process.exit(1);
   }
+}
 
 main();
