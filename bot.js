@@ -1,7 +1,5 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const tough = require("tough-cookie");
-const { wrapper } = require("axios-cookiejar-support");
 require("dotenv").config();
 
 // ─── CONFIG ───────────────────────────────────────────────
@@ -12,19 +10,36 @@ const WEBHOOK   = process.env.WEBHOOK;
 const USUARIO   = process.env.USUARIO;
 const CLAVE     = process.env.CLAVE;
 
-// ─── CLIENTE CON COOKIES ──────────────────────────────────
-const cookieJar = new tough.CookieJar();
-const client = wrapper(
-  axios.create({
-    jar: cookieJar,
-    withCredentials: true,
-    timeout: 20000,
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-      "Accept-Language": "es-AR,es;q=0.9",
-    },
-  })
-);
+// ─── MANEJO MANUAL DE COOKIES ─────────────────────────────
+let cookieStore = {};
+
+function parsearSetCookie(headers) {
+  const setCookie = headers["set-cookie"];
+  if (!setCookie) return;
+  for (const c of setCookie) {
+    const par = c.split(";")[0];
+    const idx = par.indexOf("=");
+    if (idx > 0) {
+      const key = par.slice(0, idx).trim();
+      const val = par.slice(idx + 1).trim();
+      cookieStore[key] = val;
+    }
+  }
+}
+
+function getCookieHeader() {
+  return Object.entries(cookieStore).map(([k, v]) => `${k}=${v}`).join("; ");
+}
+
+// ─── CLIENTE BASE ──────────────────────────────────────────
+const client = axios.create({
+  timeout: 20000,
+  maxRedirects: 5,
+  headers: {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    "Accept-Language": "es-AR,es;q=0.9",
+  },
+});
 
 // ─── DISCORD ──────────────────────────────────────────────
 async function enviarDiscord(msg) {
@@ -41,17 +56,18 @@ async function enviarDiscord(msg) {
 async function login() {
   console.log("🔐 Iniciando sesión...");
 
+  // GET login page
   const getRes = await client.get(LOGIN_URL);
-  const $ = cheerio.load(getRes.data);
+  parsearSetCookie(getRes.headers);
 
+  const $ = cheerio.load(getRes.data);
   const viewstate          = $("#__VIEWSTATE").val();
   const viewstategenerator = $("#__VIEWSTATEGENERATOR").val();
   const eventvalidation    = $("#__EVENTVALIDATION").val();
 
-  if (!viewstate) {
-    throw new Error("No se pudo obtener __VIEWSTATE — IP posiblemente bloqueada");
-  }
+  if (!viewstate) throw new Error("No se pudo obtener __VIEWSTATE");
 
+  // POST login
   const params = new URLSearchParams();
   params.append("__LASTFOCUS", "");
   params.append("__EVENTTARGET", "btnIngresar");
@@ -66,44 +82,40 @@ async function login() {
   const postRes = await client.post(LOGIN_URL, params.toString(), {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Referer: LOGIN_URL,
+      "Cookie": getCookieHeader(),
+      "Referer": LOGIN_URL,
     },
-    maxRedirects: 5,
   });
+  parsearSetCookie(postRes.headers);
 
   if (!postRes.data.includes("Eventuales")) {
-    throw new Error("Login falló — credenciales incorrectas o bloqueado");
+    throw new Error("Login falló");
   }
 
   console.log("✅ Login exitoso");
+  console.log("🍪 Cookies tras login:", Object.keys(cookieStore).join(", "));
 }
 
 // ─── CHEQUEAR EVENTOS ─────────────────────────────────────
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  // GET previo — guardamos las cookies de la respuesta manualmente
-  const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
-  
-  // Forzar guardado de cookies del Set-Cookie de la respuesta
-  const setCookieHeaders = getPage.headers["set-cookie"];
-  if (setCookieHeaders) {
-    for (const cookieStr of setCookieHeaders) {
-      await cookieJar.setCookie(cookieStr, "https://personal.seguridadciudad.gob.ar");
-    }
-    console.log("🍪 Cookies forzadas:", setCookieHeaders.length);
-  }
+  // GET previo a la página de eventos
+  const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`, {
+    headers: { "Cookie": getCookieHeader() }
+  });
+  parsearSetCookie(getPage.headers);
+  console.log("✅ GET previo OK");
+  console.log("🍪 Cookies tras GET:", Object.keys(cookieStore).join(", "));
 
-  // Log de todas las cookies
-  const cookies = await cookieJar.getCookies("https://personal.seguridadciudad.gob.ar");
-  console.log("🍪 Cookies totales:", cookies.map(c => c.key).join(", "));
-
+  // POST a la API
   const res = await client.post(API_URL, "", {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Accept": "*/*",
       "Content-Length": "0",
       "X-Requested-With": "XMLHttpRequest",
+      "Cookie": getCookieHeader(),
       "Origin": "https://personal.seguridadciudad.gob.ar",
       "Referer": `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
       "Sec-Fetch-Dest": "empty",
