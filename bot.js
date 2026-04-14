@@ -78,6 +78,9 @@ async function login() {
   console.log("✅ Login exitoso");
 }
 
+const cookies = await cookieJar.getCookies("https://personal.seguridadciudad.gob.ar");
+console.log("🍪 Cookies:", cookies.map(c => c.key).join(", "));
+
 // ─── CHEQUEAR EVENTOS ─────────────────────────────────────
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
