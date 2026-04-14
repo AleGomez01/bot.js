@@ -82,17 +82,21 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  // GET previo para obtener ViewState de esa página
+  // GET previo para inicializar sesión en esa página
   const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
   const $ = cheerio.load(getPage.data);
   const viewstate = $("#__VIEWSTATE").val() || "";
-  const eventvalidation = $("#__EVENTVALIDATION").val() || "";
   console.log("✅ GET previo OK, ViewState:", viewstate ? "obtenido" : "vacío");
 
-  const res = await client.post(API_URL, null, {
+  // Log de cookies antes del POST
+  const cookies = await cookieJar.getCookies("https://personal.seguridadciudad.gob.ar");
+  console.log("🍪 Cookies en POST:", cookies.map(c => `${c.key}=${c.value.slice(0,10)}...`).join(", "));
+
+  const res = await client.post(API_URL, "", {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Accept": "*/*",
+      "Content-Length": "0",
       "X-Requested-With": "XMLHttpRequest",
       "Origin": "https://personal.seguridadciudad.gob.ar",
       "Referer": `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
