@@ -82,9 +82,12 @@ async function login() {
 async function chequear() {
   console.log("🔍 Chequeando eventos...");
 
-  // GET previo para inicializar la sesión en esa página
-  await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
-  console.log("✅ GET previo OK");
+  // GET previo para obtener ViewState de esa página
+  const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`);
+  const $ = cheerio.load(getPage.data);
+  const viewstate = $("#__VIEWSTATE").val() || "";
+  const eventvalidation = $("#__EVENTVALIDATION").val() || "";
+  console.log("✅ GET previo OK, ViewState:", viewstate ? "obtenido" : "vacío");
 
   const res = await client.post(API_URL, null, {
     headers: {
