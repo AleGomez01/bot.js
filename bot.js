@@ -1,129 +1,91 @@
-require("dotenv").config({
-  path: __dirname + "/.env"
-});
-const puppeteer = require("puppeteer");
+import puppeteer from "puppeteer";
+import dotenv from "dotenv";
 
+dotenv.config();
 
-const URL = "https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx";
+const URL = "ACA_TU_URL"; // 👈 poné la URL real
 
 const USUARIO = process.env.USUARIO;
 const CLAVE = process.env.CLAVE;
 
-let eventosPrevios = new Set();
-
-// ─── LOGIN ─────────────────────────────
-console.log("USER:", USUARIO);
-console.log("PASS:", CLAVE);
+// helper sleep (reemplaza waitForTimeout)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function login(page) {
   console.log("🔐 Logueando...");
 
-  await page.goto("https://personal.seguridadciudad.gob.ar/Eventuales/Default.aspx", {
-    waitUntil: "networkidle2"
-  });
+  await page.goto(URL, { waitUntil: "networkidle2" });
 
-  await page.type("#txtUsuario", USUARIO);
-  await page.type("#txtClave", CLAVE);
+  await page.waitForSelector('input[type="text"]');
+  await page.type('input[type="text"]', USUARIO);
 
-  await Promise.all([
-    page.click("#btnIngresar"),
-    page.waitForNavigation({ waitUntil: "networkidle2" })
-  ]);
+  await page.waitForSelector('input[type="password"]');
+  await page.type('input[type="password"]', CLAVE);
+
+  await page.keyboard.press("Enter");
+
+  await sleep(3000);
 
   console.log("✅ Login OK");
 }
 
-// ─── MODAL ─────────────────────────────
-async function handleModal(page) {
+async function cerrarModal(page) {
   try {
-    await page.waitForSelector("#chkConfirmalectura", { timeout: 5000 });
+    const botonCerrar = await page.$('button'); // después afinamos selector
 
-    await page.click("#chkConfirmalectura");
-
-    await page.waitForSelector("#btnCerrarModal", { visible: true });
-
-    await page.click("#btnCerrarModal");
-
-    console.log("✅ Modal cerrado");
-  } catch {
-    console.log("🟢 No hay modal");
+    if (botonCerrar) {
+      await botonCerrar.click();
+      console.log("❌ Modal cerrado");
+    } else {
+      console.log("📭 No hay modal");
+    }
+  } catch (err) {
+    console.log("⚠️ Error cerrando modal:", err.message);
   }
 }
 
-// ─── REFRESH ───────────────────────────
-async function refreshEventos(page) {
-  await page.click("#btnRefrescarGrillaEventos");
-  console.log("🔄 Refresh eventos");
+async function refrescarEventos(page) {
+  try {
+    console.log("🔄 Refresh eventos");
 
-  await page.waitForTimeout(5000);
+    // ajustamos selector después si hace falta
+    const refreshBtn = await page.$('button');
+
+    if (refreshBtn) {
+      await refreshBtn.click();
+    }
+
+    await sleep(5000);
+
+  } catch (err) {
+    console.log("⚠️ Error refrescando:", err.message);
+  }
 }
 
-// ─── LEER EVENTOS ─────────────────────
-async function obtenerEventos(page) {
-  return await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("#tablaEventosBody tr"))
-      .map(tr => {
-        const btn = tr.querySelector("button");
-
-        if (!btn) return null;
-
-        return {
-          id: btn.dataset.eventoId || btn.innerText,
-          texto: btn.innerText.trim(),
-          disponible: !btn.disabled
-        };
-      })
-      .filter(Boolean);
-  });
-}
-
-// ─── LOOP PRINCIPAL ───────────────────
 async function loop(page) {
   while (true) {
     try {
-      await refreshEventos(page);
+      await cerrarModal(page);
+      await refrescarEventos(page);
 
-      const eventos = await obtenerEventos(page);
+      // 👉 acá después metemos la lógica de detección
+      console.log("👀 Revisando eventos...");
 
-      const actuales = new Set(eventos.map(e => e.id));
-
-      const nuevos = eventos.filter(e => !eventosPrevios.has(e.id));
-
-      for (const e of nuevos) {
-        if (e.disponible) {
-          console.log("🚨 NUEVO DISPONIBLE:", e.texto);
-        } else {
-          console.log("🆕 Nuevo (sin cupo):", e.texto);
-        }
-      }
-
-      eventosPrevios = actuales;
+      await sleep(5000);
 
     } catch (err) {
       console.log("⚠️ Error en loop:", err.message);
-
-      // posible logout → reintentar login
-      await login(page);
-      await handleModal(page);
     }
-
-    await new Promise(r => setTimeout(r, 10000)); // 10s
   }
 }
 
-// ─── MAIN ─────────────────────────────
 (async () => {
   const browser = await puppeteer.launch({
     headless: false,
-    defaultViewport: null
   });
 
   const page = await browser.newPage();
 
-  await login(page);
-  await handleModal(page);
-
-  await page.goto(URL, { waitUntil: "networkidle2" });
-
-  await loop(page);
+  await login(page); // ✅ SOLO UNA VEZ
+  await loop(page);  // 🔁 loop infinito limpio
 })();
