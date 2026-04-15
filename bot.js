@@ -9,6 +9,9 @@ const CLAVE = process.env.CLAVE;
 let eventosPrevios = new Set();
 
 // ─── LOGIN ─────────────────────────────
+console.log("USER:", USUARIO);
+console.log("PASS:", CLAVE);
+
 async function login(page) {
   console.log("🔐 Logueando...");
 
