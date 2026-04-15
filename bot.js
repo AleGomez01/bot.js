@@ -1,185 +1,123 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
+const puppeteer = require("puppeteer");
 require("dotenv").config();
 
-// ─── CONFIG ───────────────────────────────────────────────
-const BASE_URL = "https://personal.seguridadciudad.gob.ar/Eventuales";
-const LOGIN_URL = `${BASE_URL}/Default.aspx`;
-const API_URL   = `${BASE_URL}/View/PostuladosCanchaAsync.aspx/GetEventosAPI`;
-const WEBHOOK   = process.env.WEBHOOK;
-const USUARIO   = process.env.USUARIO;
-const CLAVE     = process.env.CLAVE;
+const URL = "https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx";
 
-// ─── MANEJO MANUAL DE COOKIES ─────────────────────────────
-let cookieStore = {};
+const USUARIO = process.env.USUARIO;
+const CLAVE = process.env.CLAVE;
 
-function parsearSetCookie(headers) {
-  const setCookie = headers["set-cookie"];
-  if (!setCookie) return;
-  for (const c of setCookie) {
-    const par = c.split(";")[0];
-    const idx = par.indexOf("=");
-    if (idx > 0) {
-      const key = par.slice(0, idx).trim();
-      const val = par.slice(idx + 1).trim();
-      cookieStore[key] = val;
-    }
-  }
+let eventosPrevios = new Set();
+
+// ─── LOGIN ─────────────────────────────
+async function login(page) {
+  console.log("🔐 Logueando...");
+
+  await page.goto("https://personal.seguridadciudad.gob.ar/Eventuales/Default.aspx", {
+    waitUntil: "networkidle2"
+  });
+
+  await page.type("#txtUsuario", USUARIO);
+  await page.type("#txtClave", CLAVE);
+
+  await Promise.all([
+    page.click("#btnIngresar"),
+    page.waitForNavigation({ waitUntil: "networkidle2" })
+  ]);
+
+  console.log("✅ Login OK");
 }
 
-function getCookieHeader() {
-  return Object.entries(cookieStore).map(([k, v]) => `${k}=${v}`).join("; ");
-}
-
-// ─── CLIENTE BASE ──────────────────────────────────────────
-const client = axios.create({
-  timeout: 20000,
-  maxRedirects: 5,
-  headers: {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-  },
-});
-
-// ─── DISCORD ──────────────────────────────────────────────
-async function enviarDiscord(msg) {
-  if (!WEBHOOK) return console.log("⚠️  Sin WEBHOOK configurado");
+// ─── MODAL ─────────────────────────────
+async function handleModal(page) {
   try {
-    await axios.post(WEBHOOK, { content: msg });
-    console.log("📨 Mensaje enviado a Discord");
-  } catch (err) {
-    console.log("❌ Error webhook:", err.message);
+    await page.waitForSelector("#chkConfirmalectura", { timeout: 5000 });
+
+    await page.click("#chkConfirmalectura");
+
+    await page.waitForSelector("#btnCerrarModal", { visible: true });
+
+    await page.click("#btnCerrarModal");
+
+    console.log("✅ Modal cerrado");
+  } catch {
+    console.log("🟢 No hay modal");
   }
 }
 
-// ─── LOGIN ────────────────────────────────────────────────
-async function login() {
-  console.log("🔐 Iniciando sesión...");
+// ─── REFRESH ───────────────────────────
+async function refreshEventos(page) {
+  await page.click("#btnRefrescarGrillaEventos");
+  console.log("🔄 Refresh eventos");
 
-  // GET login page
-  const getRes = await client.get(LOGIN_URL);
-  parsearSetCookie(getRes.headers);
-
-  const $ = cheerio.load(getRes.data);
-  const viewstate          = $("#__VIEWSTATE").val();
-  const viewstategenerator = $("#__VIEWSTATEGENERATOR").val();
-  const eventvalidation    = $("#__EVENTVALIDATION").val();
-
-  if (!viewstate) throw new Error("No se pudo obtener __VIEWSTATE");
-
-  // POST login
-  const params = new URLSearchParams();
-  params.append("__LASTFOCUS", "");
-  params.append("__EVENTTARGET", "btnIngresar");
-  params.append("__EVENTARGUMENT", "");
-  params.append("__VIEWSTATE", viewstate);
-  params.append("__VIEWSTATEGENERATOR", viewstategenerator);
-  params.append("__EVENTVALIDATION", eventvalidation);
-  params.append("hfRecaptchaToken", "");
-  params.append("txtUsuario", USUARIO);
-  params.append("txtClave", CLAVE);
-
-  const postRes = await client.post(LOGIN_URL, params.toString(), {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Cookie": getCookieHeader(),
-      "Referer": LOGIN_URL,
-    },
-  });
-  parsearSetCookie(postRes.headers);
-
-  if (!postRes.data.includes("Eventuales")) {
-    throw new Error("Login falló");
-  }
-
-  console.log("✅ Login exitoso");
-  console.log("🍪 Cookies tras login:", Object.keys(cookieStore).join(", "));
+  await page.waitForTimeout(5000);
 }
 
-// ─── CHEQUEAR EVENTOS ─────────────────────────────────────
-async function chequear() {
-  console.log("🔍 Chequeando eventos...");
+// ─── LEER EVENTOS ─────────────────────
+async function obtenerEventos(page) {
+  return await page.evaluate(() => {
+    return Array.from(document.querySelectorAll("#tablaEventosBody tr"))
+      .map(tr => {
+        const btn = tr.querySelector("button");
 
-  // GET previo a la página de eventos
-  const getPage = await client.get(`${BASE_URL}/View/PostuladosCanchaAsync.aspx`, {
-    headers: { "Cookie": getCookieHeader() }
+        if (!btn) return null;
+
+        return {
+          id: btn.dataset.eventoId || btn.innerText,
+          texto: btn.innerText.trim(),
+          disponible: !btn.disabled
+        };
+      })
+      .filter(Boolean);
   });
-  parsearSetCookie(getPage.headers);
-  console.log("✅ GET previo OK");
-  console.log("🍪 Cookies tras GET:", Object.keys(cookieStore).join(", "));
+}
 
-  // POST a la API
-  const res = await client.post(API_URL, "{}", {
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Accept": "*/*",
-      "Content-Length": "0",
-      "X-Requested-With": "XMLHttpRequest",
-      "Cookie": getCookieHeader(),
-      "Origin": "https://personal.seguridadciudad.gob.ar",
-      "Referer": `${BASE_URL}/View/PostuladosCanchaAsync.aspx`,
-      "Sec-Fetch-Dest": "empty",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Site": "same-origin",
-      "sec-ch-ua": '"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-    },
-  });
+// ─── LOOP PRINCIPAL ───────────────────
+async function loop(page) {
+  while (true) {
+    try {
+      await refreshEventos(page);
 
-  const raw = res.data?.d;
-  if (!raw) throw new Error("Respuesta vacía de la API");
+      const eventos = await obtenerEventos(page);
 
-  const eventos = JSON.parse(raw);
-  console.log(`📋 ${eventos.length} evento(s) encontrados`);
+      const actuales = new Set(eventos.map(e => e.id));
 
-  let encontrados = 0;
+      const nuevos = eventos.filter(e => !eventosPrevios.has(e.id));
 
-  for (const evento of eventos) {
-    for (const funcion of evento.Funcion) {
-      const cuposLibres = funcion.cupos - funcion.ocupados;
-
-      if (cuposLibres > 0) {
-        encontrados++;
-        const fecha = new Date(evento.fecha).toLocaleDateString("es-AR");
-        const presentacion = new Date(funcion.presentacion).toLocaleString("es-AR");
-
-        const msg =
-          `🚨 **CUPOS DISPONIBLES** 🚨\n` +
-          `📌 **${evento.evento}**\n` +
-          `📅 Fecha: ${fecha}\n` +
-          `🎯 Función: ${funcion.funcion}\n` +
-          `📦 Módulo: ${funcion.modulo}\n` +
-          `📍 Lugar: ${funcion.lugar}\n` +
-          `🕐 Presentación: ${presentacion}\n` +
-          `✅ Cupos libres: **${cuposLibres}** de ${funcion.cupos}\n` +
-          (funcion.observacion ? `📝 Obs: ${funcion.observacion}\n` : "") +
-          `🔗 https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx`;
-
-        console.log(`🆕 Cupos en: ${evento.evento} - ${funcion.funcion} (${cuposLibres} libres)`);
-        await enviarDiscord(msg);
+      for (const e of nuevos) {
+        if (e.disponible) {
+          console.log("🚨 NUEVO DISPONIBLE:", e.texto);
+        } else {
+          console.log("🆕 Nuevo (sin cupo):", e.texto);
+        }
       }
+
+      eventosPrevios = actuales;
+
+    } catch (err) {
+      console.log("⚠️ Error en loop:", err.message);
+
+      // posible logout → reintentar login
+      await login(page);
+      await handleModal(page);
     }
-  }
 
-  if (encontrados === 0) {
-    console.log("😴 Sin cupos disponibles por ahora");
+    await new Promise(r => setTimeout(r, 10000)); // 10s
   }
 }
 
-// ─── MAIN ─────────────────────────────────────────────────
-async function main() {
-  try {
-    await login();
-    await chequear();
-    console.log("✔️  Ejecución completada");
-  } catch (err) {
-    const detalle = err.response
-      ? `Status: ${err.response.status} - ${JSON.stringify(err.response.data).slice(0, 300)}`
-      : err.message;
-    console.log("❌ Error detalle:", detalle);
-    await enviarDiscord(`⚠️ Bot error: ${detalle}`);
-    process.exit(1);
-  }
-}
+// ─── MAIN ─────────────────────────────
+(async () => {
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null
+  });
 
-main();
+  const page = await browser.newPage();
+
+  await login(page);
+  await handleModal(page);
+
+  await page.goto(URL, { waitUntil: "networkidle2" });
+
+  await loop(page);
+})();
