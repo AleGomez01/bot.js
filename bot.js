@@ -1,5 +1,5 @@
-import puppeteer from "puppeteer";
-import dotenv from "dotenv";
+const puppeteer = require("puppeteer");
+const dotenv = require("dotenv");
 
 dotenv.config();
 
@@ -8,7 +8,7 @@ const URL = "ACA_TU_URL"; // 👈 poné la URL real
 const USUARIO = process.env.USUARIO;
 const CLAVE = process.env.CLAVE;
 
-// helper sleep (reemplaza waitForTimeout)
+// helper sleep
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function login(page) {
@@ -31,7 +31,7 @@ async function login(page) {
 
 async function cerrarModal(page) {
   try {
-    const botonCerrar = await page.$('button'); // después afinamos selector
+    const botonCerrar = await page.$('button');
 
     if (botonCerrar) {
       await botonCerrar.click();
@@ -48,7 +48,6 @@ async function refrescarEventos(page) {
   try {
     console.log("🔄 Refresh eventos");
 
-    // ajustamos selector después si hace falta
     const refreshBtn = await page.$('button');
 
     if (refreshBtn) {
@@ -68,7 +67,6 @@ async function loop(page) {
       await cerrarModal(page);
       await refrescarEventos(page);
 
-      // 👉 acá después metemos la lógica de detección
       console.log("👀 Revisando eventos...");
 
       await sleep(5000);
@@ -86,6 +84,6 @@ async function loop(page) {
 
   const page = await browser.newPage();
 
-  await login(page); // ✅ SOLO UNA VEZ
-  await loop(page);  // 🔁 loop infinito limpio
+  await login(page);
+  await loop(page);
 })();
