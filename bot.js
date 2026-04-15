@@ -1,5 +1,8 @@
+require("dotenv").config({
+  path: __dirname + "/.env"
+});
 const puppeteer = require("puppeteer");
-require("dotenv").config();
+
 
 const URL = "https://personal.seguridadciudad.gob.ar/Eventuales/View/PostuladosCanchaAsync.aspx";
 
