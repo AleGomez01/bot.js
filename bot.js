@@ -1,89 +1,224 @@
-const puppeteer = require("puppeteer");
-const dotenv = require("dotenv");
+require('dotenv').config();
+const puppeteer = require('puppeteer');
 
-dotenv.config();
-
-const URL = "ACA_TU_URL"; // 👈 poné la URL real
-
+let eventosAnteriores = new Set();
+const URL = process.env.URL;
 const USUARIO = process.env.USUARIO;
 const CLAVE = process.env.CLAVE;
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const WEBHOOK = process.env.DISCORD_WEBHOOK;
 
-// helper sleep
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function testDiscord() {
+  try {
+    await fetch(WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: "🚀 Bot funcionando - prueba OK"
+      })
+    });
 
-async function login(page) {
-  console.log("🔐 Logueando...");
+    console.log("📨 Mensaje enviado a Discord");
 
-  await page.goto(URL, { waitUntil: "networkidle2" });
-
-  await page.waitForSelector('input[type="text"]');
-  await page.type('input[type="text"]', USUARIO);
-
-  await page.waitForSelector('input[type="password"]');
-  await page.type('input[type="password"]', CLAVE);
-
-  await page.keyboard.press("Enter");
-
-  await sleep(3000);
-
-  console.log("✅ Login OK");
+  } catch (err) {
+    console.log("❌ Error webhook:", err.message);
+  }
 }
+
+async function enviarDiscord(evento, intento = 1) {
+  try {
+    await fetch(WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: "🚨 EVENTO DISPONIBLE 🚨",
+        embeds: [
+          {
+            title: "Nuevo evento detectado",
+            description: evento.texto,
+            color: 16711680,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      })
+    });
+
+    console.log("📨 Notificación enviada a Discord");
+
+  } catch (err) {
+    console.log(`❌ Error Discord (intento ${intento}):`, err.message);
+
+    if (intento < 3) {
+      await new Promise(r => setTimeout(r, 2000));
+      return enviarDiscord(evento, intento + 1);
+    }
+  }
+}
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
 async function cerrarModal(page) {
   try {
-    const botonCerrar = await page.$('button');
+    const modal = await page.$('#modalTolerancia');
 
-    if (botonCerrar) {
-      await botonCerrar.click();
-      console.log("❌ Modal cerrado");
-    } else {
-      console.log("📭 No hay modal");
-    }
+    if (modal) {
+      console.log("🚫 Modal detectado (tolerancia)");
+
+      const checkbox = await page.$('#chkConfirmaLectura');
+
+      if (checkbox) {
+        await checkbox.click();
+        console.log("☑️ Checkbox marcado");
+      }
+
+      await page.waitForFunction(() => {
+        const btn = document.querySelector('#btnCerrarModal');
+        return btn && window.getComputedStyle(btn).display !== 'none';
+      });
+
+      const botonCerrar = await page.$('#btnCerrarModal');
+
+      if (botonCerrar) {
+        await page.evaluate(el => el.click(), botonCerrar);
+        console.log("❌ Modal cerrado correctamente");
+      }
+    } 
+
   } catch (err) {
     console.log("⚠️ Error cerrando modal:", err.message);
+    await testDiscord();
   }
+}
+
+
+async function detectarEventos(page) {
+  const eventos = await page.evaluate(() => {
+  const resultados = [];
+
+  // 🔵 EVENTOS NUEVOS
+  const filasEventos = document.querySelectorAll('#tablaEventosBody tr');
+
+  filasEventos.forEach(tr => {
+    const texto = tr.innerText.trim();
+
+    if (!texto.includes("No existen eventos")) {
+      resultados.push({
+        tipo: "evento",
+        texto
+      });
+    }
+  });
+
+  // 🟡 REEMPLAZOS
+  const filasReemplazos = document.querySelectorAll('#tablaReemplazos tr');
+
+  filasReemplazos.forEach(tr => {
+    const texto = tr.innerText.trim();
+
+    if (!texto.includes("No existen reemplazos")) {
+      resultados.push({
+        tipo: "reemplazo",
+        texto
+      });
+    }
+  });
+
+  return resultados;
+});
+
+  if (eventos.length === 0) {
+    console.log("😴 Todo lleno...");
+    return;
+  }
+
+  console.log("📊 Eventos detectados:", eventos.length);
+
+  const eventosActuales = new Set();
+
+  for (const e of eventos) {
+    console.log("🧪 Revisando:", e.texto);
+
+    const clave = e.texto
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+    eventosActuales.add(clave);
+
+    if (!eventosAnteriores.has(clave)) {
+      console.log("🚨 EVENTO NUEVO DETECTADO:");
+      console.log(`👉 ${e.texto}`);
+
+      process.stdout.write('\x07');
+    
+
+      await enviarDiscord(e);
+    }
+  }
+
+  // 🔁 actualizar memoria
+  eventosAnteriores = eventosActuales;
 }
 
 async function refrescarEventos(page) {
   try {
-    console.log("🔄 Refresh eventos");
+    console.log("🔄 Refrescando eventos...");
 
-    const refreshBtn = await page.$('button');
+    // Esperar que el botón de eventos esté visible
+    await page.waitForFunction(() => {
+      const btn = document.querySelector('#btnRefrescarGrillaEventos');
+      return btn && window.getComputedStyle(btn).display !== 'none';
+    });
 
-    if (refreshBtn) {
-      await refreshBtn.click();
-    }
+    await page.click('#btnRefrescarGrillaEventos');
+    console.log("✅ Click en eventos");
 
-    await sleep(5000);
+    // Espera 1 segundo
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Esperar botón de reemplazos
+    await page.waitForFunction(() => {
+      const btn = document.querySelector('#btnRefrescarGrillaReemplazos');
+      return btn && window.getComputedStyle(btn).display !== 'none';
+    });
+
+    await page.click('#btnRefrescarGrillaReemplazos');
+    console.log("🔁 Click en reemplazos");
 
   } catch (err) {
     console.log("⚠️ Error refrescando:", err.message);
   }
 }
 
-async function loop(page) {
-  while (true) {
-    try {
-      await cerrarModal(page);
-      await refrescarEventos(page);
-
-      console.log("👀 Revisando eventos...");
-
-      await sleep(5000);
-
-    } catch (err) {
-      console.log("⚠️ Error en loop:", err.message);
-    }
-  }
-}
-
 (async () => {
   const browser = await puppeteer.launch({
     headless: false,
+    defaultViewport: null
   });
 
   const page = await browser.newPage();
 
-  await login(page);
-  await loop(page);
+  console.log("🔐 Logueando...");
+  await page.goto(URL, { waitUntil: 'networkidle2' });
+
+  // ✅ LOGIN CORRECTO
+  await page.waitForSelector('#txtUsuario', { timeout: 10000 });
+  await page.waitForSelector('#txtClave', { timeout: 10000 });
+
+  await page.type('#txtUsuario', USUARIO, { delay: 50 });
+  await page.type('#txtClave', CLAVE, { delay: 50 });
+
+  // Click login (ASP.NET postback)
+  await page.click('#btnIngresar');
+  await sleep(5000);
+
+  console.log("✅ Login OK");
+
+  // 🔁 LOOP INFINITO
+  while (true) {
+  await cerrarModal(page);
+  await refrescarEventos(page);
+  await detectarEventos(page);
+
+  await sleep(7000);
+}
 })();
